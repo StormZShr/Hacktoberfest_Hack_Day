@@ -24,7 +24,7 @@ const SHOTS = process.env.LAUNCHPAD_SHOTS || path.join(os.tmpdir(), "launchpad-c
 fs.mkdirSync(SHOTS, { recursive: true });
 const PROFILE = path.join(SHOTS, "cdp-profile");
 const SITE = "http://localhost:3000";
-const API = "http://127.0.0.1:8001";
+const API = process.env.LAUNCHPAD_API || "http://127.0.0.1:8000";
 const PORT = Number(process.env.CDP_PORT || 9223);
 
 // The ZIP the seller uploads. day2_check.ps1 builds the same file; build it here

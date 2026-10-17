@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$base = "http://127.0.0.1:8001"
+$base = "http://127.0.0.1:8000"
 $tmp = if ($env:LAUNCHPAD_TMP) { $env:LAUNCHPAD_TMP } else { Join-Path $env:TEMP "launchpad-checks" }
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $ok = 0; $fail = 0

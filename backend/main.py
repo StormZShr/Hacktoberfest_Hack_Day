@@ -1,7 +1,7 @@
 """FastAPI app: CORS for the Next.js dev server, routers, and /health.
 
 Run from the backend/ directory:
-    uvicorn main:app --reload --port 8001
+    uvicorn main:app --reload --port 8000
 """
 
 from contextlib import asynccontextmanager
