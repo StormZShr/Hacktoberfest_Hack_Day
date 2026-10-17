@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 node_modules/
 .next/
+
+# local secrets and data (added 2026-10-17 with the Launchpad backend)
+.env
+.env.local
+backend/launchpad.db
+backend/storage/

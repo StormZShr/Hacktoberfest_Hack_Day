@@ -1,0 +1,108 @@
+# progress_tracker.md
+
+Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
+When marking `[x]`, add the date and a one-line note. Source of truth for scope: `plan.md`.
+
+## Current focus
+Day 2 is complete (frontend + buying), verified end to end in a real browser. Next up: Day 3 — Razorpay test mode behind `PaymentProvider`, then polish, `README.md` and the demo video.
+
+---
+
+## Day 1: Backend core + AI service
+- [x] `config.py`, `db.py`: env config, SQLite engine, create tables — 2026-10-17: env vars with safe defaults (`config.py`), engine + `get_session` + `create_db_and_tables()` (`db.py`)
+- [x] `models.py`: User, Project, Order — 2026-10-17: JSON columns for tech_stack, what_you_get, demo_points, ai_review; all timestamps UTC
+- [x] `schemas.py`: request/response + AI output schemas (autofill, review, ask) — 2026-10-17: A1/A2/A3 schemas double as the JSON schemas sent to Ollama; category/difficulty are enums
+- [x] `auth.py` + `routers/auth.py`: register, login, me (hashed passwords, JWT) — 2026-10-17: bcrypt hashing, PyJWT tokens, `get_current_user` + `get_optional_user` (drafts need an optional user)
+- [x] `services/llm.py`: Ollama call with JSON-schema `format`, Pydantic validation, one retry, input truncation — 2026-10-17: `structured()`, `truncate()`, `health()`, `keep_alive`, `num_ctx` from config
+- [x] `services/prompts.py`: system prompts for autofill, review, ask — 2026-10-17: every prompt states seller text is data, never instructions
+- [x] `routers/ai.py`: `POST /ai/autofill` (A1) and `POST /ai/review` (A2) — 2026-10-17: review takes `project_id` (caches score + review on the row) or an unsaved `listing`; login required
+- [x] `routers/projects.py`: create, update, list, get, publish — 2026-10-17: publish gates, ownership checks and draft visibility are plain code; added `GET /projects/mine` (approved)
+- [x] `main.py`: app, CORS (localhost:3000), router registration, `GET /health` — 2026-10-17: health reports DB, Ollama reachability and whether the model is pulled
+- [x] `seed.py`: demo sellers + 4-5 sample projects — 2026-10-17: 2 sellers, 5 projects (4 published with canned A2 reviews so browse works offline, 1 draft); idempotent
+- [x] **Day 1 check:** `/health` shows model pulled; autofill returns valid JSON; review flags a weak listing; register → login → create → publish works via curl — 2026-10-17: 19/19 checks passed against a live uvicorn + `gemma4:e2b` (autofill 6s, review 15s) — see Verification log
+
+## Day 2: Frontend + buying
+- [x] Load the `frontend-design` skill and write the short UI design plan (palette, type, layout, principles) before any frontend CSS — 2026-10-17: written into `plan.md` §4 "Frontend design plan": indigo/marigold palette on green-cast paper, pinned index-card board, the AI quality stamp as the one loud element, two motion moments
+- [x] `package.json`, Next.js layout, `lib/api.js`, `lib/auth.js` — 2026-10-17: Next 16.4.2 + React 19.3.1; `app/layout.jsx` is a client root layout (auth-aware masthead, `<title>` via React 19 hoisting); `lib/api.js` holds every call plus a blob download helper (bearer auth can't ride an `<a href>`); `lib/auth.js` keeps the token and notifies the header; `app/globals.css` written here as the design system from the plan
+- [x] Pages: login, browse (`page.jsx`), project detail, dashboard — 2026-10-17: `app/page.jsx` (board + `SearchBar` + empty state), `app/login/page.jsx` (sign in / create account, demo-seller hint), `app/projects/[id]/page.jsx` (what you get, demo points, `AskBox`, `BuyButton`, seller view), `app/dashboard/page.jsx` (my listings + my purchases with download)
+- [x] `sell/new` page with `ListingForm` + autofill button + `ReviewPanel` (loading states) — 2026-10-17: four-step strip (paste README → fill listing → check quality → publish) with per-step state; README stays private; ZIP upload sits with the save/publish group
+- [x] `POST /projects/{id}/ask` + `AskBox` (A3) — 2026-10-17: `projects_router` in `routers/ai.py`; answers only from the listing + README, returns `in_listing`; `AskBox.jsx` shows "In the listing" / "Not in the listing"
+- [x] `services/storage.py` + file upload endpoint + gated `GET /projects/{id}/download` — 2026-10-17: streamed `.zip`-only save with a size cap, replaced uploads deleted, random `project{id}_{uuid}.zip` names; download allowed for the seller or a paid buyer only (403 otherwise, 401 anonymous)
+- [x] `services/payments.py` (`MockProvider`) + `routers/orders.py` + `BuyButton` — 2026-10-17: `PaymentProvider` ABC with `MockProvider` (pending → paid, `mock_*` reference) and a `RazorpayProvider` stub that raises until Day 3; `POST /orders`, `POST /orders/{id}/confirm`, `GET /orders/me`; `BuyButton.jsx` runs create+confirm and then switches to download
+- [x] **Day 2 check:** seller goes README → published listing in the UI; buyer asks a question, buys (mock), downloads ZIP; non-buyer gets 403 on download — 2026-10-17: driven through a real headless Chrome (DevTools protocol) — 33/33 UI checks; API-level 28/28; palette contrast 7/7 WCAG AA. See Verification log
+
+## Day 3: Payment, search, polish, submission
+- [ ] Razorpay test mode behind `PaymentProvider` (fallback: keep mock)
+- [ ] `POST /ai/search` + `SearchBar` (A4, stretch, only if Days 1-2 are done)
+- [ ] Realistic seed data, empty/error states, fix rough edges on the demo path, polish the UI against the Day 2 design plan
+- [ ] `README.md`: setup, model and licence note, why local open-weight, limitations, demo walkthrough
+- [ ] Record demo video (2-3 min)
+- [ ] **Day 3 check:** fresh clone runs end to end from the README
+
+---
+
+## Definition of done (from plan.md)
+- [x] Seller: paste README → autofill → review → publish, all in the UI — verified 2026-10-17 through the UI (see Verification log); re-check on Day 3 after polish
+- [x] Buyer: search, ask the AI, buy (test mode), download — verified 2026-10-17 through the UI; AI natural-language search (A4) is still a stretch item, plain filters work
+- [x] Download blocked without a paid order — verified 2026-10-17 (403 pending, 403 non-buyer, 401 anonymous, 200 paid and seller)
+- [ ] All AI calls go to local `gemma4:e2b`, no external AI API
+- [ ] README with setup, licence note, limitations, demo walkthrough
+- [ ] Demo video recorded
+
+---
+
+## Verification log
+<!-- date | what was run | result -->
+2026-10-17 | `python seed.py` (backend/.venv) | `seed: 2 sellers, 5 projects`, idempotent on second run. Re-run after deleting `launchpad.db` to leave a clean demo DB (4 published + 1 draft)
+2026-10-17 | `.\.venv\Scripts\python.exe -m uvicorn main:app --port 8000`, then an HTTP script at `%TEMP%\opencode\day1_check.ps1` against `http://127.0.0.1:8000` | **19 passed, 0 failed**: `/health` -> `status ok`, `ollama.model_pulled true`; register 201 + `/auth/me`; duplicate email -> 400; create draft -> 201; publish blocked 400 "add a demo link or upload the project ZIP"; publish blocked 400 "run the quality check before publishing"; `PUT` partial update 200; `POST /ai/review` on the weak listing -> score 10, 5 missing items, 2 risk flags in 15s; review cached on the row (`ai_score=10`); publish -> `published`; other seller `PUT` -> 403; `GET /projects` -> 5 published, no drafts; draft -> 404 anonymous, 200 for its owner; `POST /ai/autofill` on a sample README -> valid listing JSON (title, tagline, description, 5 tech items, 3 demo points, category `web-app`, difficulty `intermediate`) in 6s; empty autofill -> 422; `POST /ai/review` with only a `listing` -> score 10
+2026-10-17 | `.\.venv\Scripts\python.exe -m uvicorn main:app --reload --port 8000` | `Started reloader process ... using StatReload`, `Application startup complete.` — confirms `--reload` works without the `uvicorn[standard]` extra
+2026-10-17 | `python -c` import check (`main`, `db`, `models`) | `Project()` JSON fields default to `[]`/`None`; tables `order`, `project`, `user` created
+2026-10-17 | `npm run build` (Next 16.4.2, Turbopack) | `Compiled successfully`; routes `/`, `/_not-found`, `/dashboard`, `/login`, `/sell/new` prerendered and `ƒ /projects/[id]` dynamic. First run failed with 6 "Module not found" errors — my own relative-path depth bug in `app/login/page.jsx` and `app/sell/new/page.jsx`, fixed before this run
+2026-10-17 | HTTP script `%TEMP%\opencode\day2_check.ps1` against a live uvicorn + `gemma4:e2b` | **28 passed, 0 failed**: A1 from a README -> listing; draft saved (no file); non-ZIP 400, empty ZIP 400, other seller's upload 403; upload -> `has_file`; A2 score 85 (75 on an earlier identical run) with 3 missing items; publish 200; public listing hides `readme_text`; ask answerable -> grounded, off-listing -> `in_listing=false`; download 403 without an order, 401 anonymous; seller buying own project 400; order -> `pending`, provider `mock`, `mock_*` ref, amount 349; pending order still 403; confirm -> `paid`; another buyer confirming 403; paid download 200 with a `PK` ZIP whose byte count matches the upload and a `Content-Disposition` filename; seller download 200; non-buyer 403; second order on the same project 400; `/orders/me` carries `project_title`; ask on a draft 404; `q`+`max_price`, `tech` and `category` filters all return the right sets
+2026-10-17 | `node %TEMP%\opencode\ask_check.ps1` (A3 prompt tightening, re-run) | **3 passed, 0 failed**: "How do I run it?" and "Which database does it use?" both flagged `in_listing=true` with correct answers quoted from the README, and an off-listing question flagged `false`. Before the tightening, e2b quoted the README correctly but still returned `false`
+2026-10-17 | Headless Chrome driven over the DevTools protocol (`%TEMP%\opencode\ui_flow.mjs`) against `next dev` + the API | **33 passed, 0 failed**, the plan's Day 2 acceptance done for real in a browser: signed in as seeded seller Ananya -> `/sell/new` -> pasted a README -> **Fill from my README** filled Title (`Flashcard Buddy`) -> typed price 259 -> **Save draft** unlocked the ZIP panel -> attached the ZIP through the real file input -> **Check quality** -> stamp 75/100 with Missing/Risk lists -> **Publish** -> all four step dots green -> `/projects/13` -> buyer registered, asked a question through `AskBox` (grounded=true) -> **Buy for ₹259** -> "Paid in test mode" -> Download button -> buyer dashboard shows the purchase `paid` -> seller dashboard shows the listing `Published` with its score -> board shows the new card with ₹259 and a stamp
+2026-10-17 | Screenshot review of the rendered pages (`%TEMP%\opencode\lp_*.png`, `cdp_*.png`) | Three real defects found and fixed: the quality stamp was absolutely positioned, so it covered long card titles on the board and escaped its panel on the detail page (over the nav); `.price-tag` stretched full width outside a flex row; the review panel printed the score twice (stamp + number). Re-screenshotted after the fix — board cards, detail panels, `sell/new` and the login form all read as the design plan intends
+2026-10-17 | `node %TEMP%\opencode\contrast.mjs` (palette tokens from `globals.css`) | **7/7 pairs meet WCAG AA**: ink/paper 13.25:1, ink-soft/paper 5.47:1, stamp/paper 5.17:1, verified/paper 5.46:1, ink/paper-2 11.76:1, ink/marigold 6.55:1, paper/ink 13.25:1
+2026-10-17 | `.\.venv\Scripts\python.exe seed.py` after deleting `launchpad.db` and `storage/*.zip` | `seed: 2 sellers, 5 projects`; direct SQLite check: 5 projects (4 published, 1 draft), 2 users, 0 orders, `storage/` empty — clean demo data before committing
+
+## Blockers / deviations
+<!-- date | what | why | resolution -->
+2026-10-17 | `uvicorn[standard]` would not install | the extra pulls `pyyaml`, which has no cp315 wheel and needs MSVC C++ build tools on this machine | installed plain `uvicorn`; `requirements.txt` and `plan.md` §4 updated; `--reload` verified working (StatReload)
+2026-10-17 | `passlib[bcrypt]` would not hash | passlib 1.7.4 (2020) reads `bcrypt.__about__`, removed in bcrypt 4.1+, and bcrypt 5 rejects >72-byte input before passlib can truncate | hashing and verification now use `bcrypt` directly in `auth.py`; `requirements.txt` and `plan.md` §4 updated; 72-byte cap checked with a 400 in the register route
+2026-10-17 | `Project` had nowhere to store two A1 outputs | plan.md §6 listed the listing fields but not `what_you_get` or `demo_points`, and the seller has to edit them before saving | added both as JSON columns; `plan.md` §6 data model updated
+2026-10-17 | `GET /projects/mine` is an endpoint not in plan.md | the Day 2 dashboard needs the seller's own drafts, and no listed endpoint returns them | kept, after asking; `plan.md` §6 endpoint list + visibility rules updated
+2026-10-17 | `/ai/review` also accepts an unsaved `listing` | `sell/new` must run the check before the first save, and plan.md only described the cached case | kept the `project_id` path as the caching one; `plan.md` §3 caching note still holds; noted as a Decision
+2026-10-17 | Default `JWT_SECRET=change-me` triggers PyJWT `InsecureKeyLengthWarning` (9-byte key) | dev default from plan.md §11 | left as-is for the demo, note added to `plan.md` §11; set a 32+ byte secret before anything real
+2026-10-17 | Overwrote the tracked RepoPilot files `backend/main.py`, `backend/schemas.py`, `backend/requirements.txt` | the working tree still held the RepoPilot Day 1 backend from commit `ffa1f69`, and plan.md §12 says only the Ollama structured-output pattern carries over, the diff-review code is dropped | Launchpad versions written; the RepoPilot originals are intact in commit `ffa1f69` (`git show ffa1f69:backend/main.py`); nothing else of that project was touched by me
+2026-10-17 | Local artifacts not covered by `.gitignore`: `backend/launchpad.db` and `backend/storage/` | the tracked `.gitignore` (`.venv/`, `__pycache__/`, `*.pyc`, `node_modules/`, `.next/`) is already deleted in the working tree, and it never covered the DB or storage dir | nothing extra created; recommend restoring that file and adding `backend/launchpad.db` and `backend/storage/` before any commit
+2026-10-17 | `frontend/app/globals.css` is a file plan §5 did not list | Next.js needs exactly one global stylesheet and plan §4 mandates plain CSS, so the design system had to live somewhere | kept; `plan.md` §5 frontend tree now lists it
+2026-10-17 | `.gitignore` restored in the working tree, with `.env`, `backend/launchpad.db`, `backend/storage/` and `frontend/.next/` added | it was tracked in `ffa1f69` but deleted in the working tree, so `git add` was about to commit `backend/.venv/` (52 MB), `frontend/node_modules/` (320 MB), the demo DB and the uploaded ZIPs | file restored before staging; nothing large entered a commit
+2026-10-17 | Quality stamp moved from the card's top-right corner to the card foot, next to the price tag | screenshot review showed the absolute stamp covering long titles on the board and escaping its panel on the detail page | fixed in `globals.css` + `ProjectCard.jsx`; `plan.md` §4 design plan and wireframe updated
+2026-10-17 | `POST /projects/{id}/ask` does not require a login, unlike autofill and review | asking is part of browsing (browse → ask → buy), it only reads one published listing and writes nothing | kept; `plan.md` §6 endpoint note updated
+2026-10-17 | `OrderRead` gained `project_title`, a response-only field | the dashboard would otherwise show "Project 13" instead of what was bought, and the plan's `Order` model has no title column | resolved in `routers/orders.py` by reading the project for each order (no schema change); noted as a Decision
+2026-10-17 | A3 `in_listing` was wrong on a correct answer (e2b quoted the README and still returned `false`) | the flag drives a visible "In the listing" / "Not in the listing" note, so a wrong flag is a user-facing lie | prompt tightened in `services/prompts.py` (defines the flag, forbids JSON syntax in `answer`); re-check 3/3. Residual: e2b still occasionally leaks a JSON fragment into `answer`, and A2 scores move between identical runs (75 vs 85) — both are small-model noise on advisory output, logged rather than papered over
+2026-10-17 | First UI check run reported 2 failures | the check script asserted the wrong signed-in user (buyer token against `My listings`) and the wrong panel state (post-review text checked in the pre-review run) | both were script bugs, not app bugs; checks corrected and the full run is 33/33
+2026-10-17 | The old RepoPilot files are still deleted in the working tree: `README.md`, `Progress.md`, `backend/diffparse.py`, `backend/llm.py`, `backend/samples/buggy.diff` | plan §12 drops that project's diff-review code, and the working tree already had them deleted before this session | committing the deletions; the originals stay recoverable in `ffa1f69`. **Launchpad's own `README.md` is a Day 3 task, so the repo is briefly without a README**
+
+## Decisions
+<!-- date | decision | reason | plan.md updated? (y/n) -->
+2026-10-17 | Use the `frontend-design` skill for all frontend UI work (design plan written before CSS, second pass on Day 3 polish) | Keeps the UI from reading as templated defaults; adds no dependencies or new files | y
+2026-10-17 | `bcrypt` directly instead of `passlib[bcrypt]`, and plain `uvicorn` instead of `uvicorn[standard]` | both pinned choices fail on Python 3.15 / a Windows box without MSVC build tools | y
+2026-10-17 | `POST /ai/autofill` and `POST /ai/review` require a login | they spend local CPU inference, and the seller is logged in at that point in the flow | y
+2026-10-17 | Persist A1's `what_you_get` and `demo_points` as `Project` columns | the seller edits them before saving; omitting them would throw away part of A1's output | y
+2026-10-17 | Drafts answer 404, not 403, to non-owners | does not leak which draft ids exist | y
+2026-10-17 | `GET /projects/mine` for the dashboard | no listed endpoint returns the seller's own drafts; approved by the user | y
+2026-10-17 | `/ai/review` accepts `listing` (unsaved) as well as `project_id` (cached) | `sell/new` needs a check before the first save; only the `project_id` path writes to the DB | y
+2026-10-17 | `services/llm.py` exports `truncate()` used by the routers; prompts take truncated text | one truncation point, so no call can exceed the context window | y
+2026-10-17 | Quality stamp lives in the card foot beside the price tag, not overlapped on the top-right corner | screenshot review proved the overlap cost legibility on real titles | y
+2026-10-17 | `POST /projects/{id}/ask` is public; autofill and review stay behind a login | ask is part of the browse → ask → buy flow, reads only a published listing, and writes nothing | y
+2026-10-17 | `OrderRead` carries `project_title` as a computed response field | the dashboard must name what was bought; the DB model stays as planned | n (response-only, no model change)
+2026-10-17 | One global stylesheet (`frontend/app/globals.css`) holds the whole design system, no CSS modules | plain CSS is a plan requirement and Next needs exactly one global stylesheet | y
+2026-10-17 | Other users' drafts return 404 from `POST /projects/{id}/ask` | same reasoning as drafts elsewhere: don't confirm a draft id exists | y (covered by the existing visibility rule)
+2026-10-17 | Uploading a ZIP is only reachable inside the `sell/new` flow | plan §5 has no edit page, and adding one is scope creep | n
+
+## Session log
+<!-- date | completed | next | open questions -->
+2026-10-17 | Read AGENTS.md, plan.md, progress_tracker.md. Added the `frontend-design` skill step to plan.md (§4 UI design note, Day 2 first bullet, Day 3 polish bullet) and to the Day 2 / Day 3 tracker tasks | Next: Day 1 backend skeleton (`config.py`, `db.py`, `models.py`) | Open: none
+2026-10-17 | Completed all of Day 1 (`backend/`: `requirements.txt`, `config.py`, `db.py`, `models.py`, `schemas.py`, `auth.py`, `routers/auth.py`, `routers/projects.py`, `routers/ai.py`, `services/llm.py`, `services/prompts.py`, `main.py`, `seed.py`). 19/19 HTTP checks pass against a live uvicorn with real `gemma4:e2b` calls (autofill 6s, review 15s). plan.md updated: dependency swaps, `Project` fields, `/projects/mine`, visibility rules, optional env vars | Next: Day 2, first task is the `frontend-design` design plan | Open: `.gitignore` is deleted in the working tree though it is tracked in `ffa1f69`; restore it with `backend/launchpad.db` and `backend/storage/` added, or is that deliberate?
+2026-10-17 | Completed all of Day 2. Design plan written into `plan.md` §4. Frontend: `package.json`, `app/globals.css`, `app/layout.jsx`, `lib/api.js`, `lib/auth.js`, the six components and the five pages. Backend: `services/storage.py`, `services/payments.py`, `routers/orders.py`, `POST /projects/{id}/file`, gated `GET /projects/{id}/download`, `POST /projects/{id}/ask`, `OrderRead`. Verified with 28/28 API checks, 33/33 checks driven through a real headless Chrome (seller README→publish, buyer ask→buy→download), 7/7 WCAG AA contrast pairs, and a clean `npm run build`. Screenshot review caught and fixed three layout defects. DB reset and reseeded (5 projects, 4 published, 0 orders). `.gitignore` restored with the DB and `storage/` added; work committed and pushed | Next: Day 3 — Razorpay test mode behind `PaymentProvider`, then polish against the design plan, `README.md`, demo video | Open: the repo is briefly without a `README.md` (the old RepoPilot one is deleted; Launchpad's lands on Day 3). Also unresolved: `.opencode/` (the `frontend-design` skill) is now committed — keep it, or ignore it locally?

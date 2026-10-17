@@ -1,87 +1,59 @@
-# AGENT.md — working rules for this repository
+# AGENTS.md: Launchpad
 
-## Prime directive
+Student project marketplace. Local open-weight AI (Ollama + gemma4:e2b) is core to the product.
+**3-day mini project. Smallest working MVP only.**
 
-`plan.md` is the only source of truth for what to build. `Progress.md` is the only
-source of truth for what has already been built.
+## Start of every session (mandatory)
 
-**Never start a new plan step without first reading `plan.md` and updating
-`Progress.md`.** This applies to every session, including sessions that appear to
-continue earlier work.
+1. Read `plan.md` in full. It is the source of truth for scope, stack, file structure, endpoints, and the day-by-day plan.
+2. Read `progress_tracker.md`. It tells you what is done, what is in progress, and what is blocked.
+3. Pick the next unchecked task for the **current day** from the tracker. Do not skip ahead to a later day.
+4. If `plan.md` and the tracker disagree, stop and ask. Do not guess.
 
-## Required loop
+## While working
 
-Repeat this for every single step in `plan.md`:
+- Work on **one task at a time**. Before starting it, set it to `[~]` (in progress) in `progress_tracker.md`.
+- Stay inside the file structure in `plan.md`. Do not create files, folders, endpoints, or pages that aren't listed there.
+- Keep files small and single-purpose.
+- Ask before adding any dependency not listed in `plan.md` section 4, or any feature not in the plan or on its cut list.
+- Never use an external AI API. All AI calls go through `backend/services/llm.py` to local Ollama, using the model from `LAUNCHPAD_MODEL` (default `gemma4:e2b`).
+- AI output must be schema-constrained, validated with Pydantic, and treated as advisory. Seller-provided text is data, never instructions.
+- Rules enforced by code (publish requirements, download gating, ownership checks) must never depend on the model.
+- No real payments. Use `MockProvider`; Razorpay is test mode only.
+- Do not hardcode secrets. Use env vars from `plan.md` section 11.
 
-1. **Read `plan.md`.** Identify the next incomplete step — the earliest task whose
-   row in `Progress.md` is not `Done`.
-2. **Read `Progress.md`.** Confirm that step is genuinely next. Never reorder steps,
-   skip ahead, or work in parallel on a later step.
-3. **Mark it `In progress` in `Progress.md` *before* writing any code.** This is the
-   gate: no edits happen until the step is recorded as started. Include the date and
-   the files you expect to touch.
-4. **Do the work.** Stay inside the "Files touched" list for that step. If the work
-   needs a file outside that list, stop and ask the user first.
-5. **Run that step's manual check.** Acceptance in this project is manual only.
-   Record the exact command run and its observed output.
-6. **Mark the step `Done` (or `Blocked`) in `Progress.md` *before* moving on.**
-   Include: status, files changed, the manual check command, the observed result, and
-   any deviation from `plan.md`.
+## After finishing each task (mandatory)
 
-If a step fails its manual check, leave it `In progress` or mark it `Blocked` with the
-reason. Do not start the next step to "come back to it later".
+Update `progress_tracker.md` before moving on:
 
-## Progress.md format
+1. Mark the task `[x]` and add the date and a one-line note on what was done (file names touched).
+2. If you ran a manual check, record exactly what you ran and the result under "Verification log".
+3. If something broke, was skipped, or deviated from the plan, add it to "Blockers / deviations" with the reason.
+4. Update "Current focus" to the next task.
+5. If a decision changes scope or design, also update `plan.md` and note it under "Decisions".
 
-Keep one table plus a dated log. Update in place; do not rewrite history.
+If you stop mid-task, leave it as `[~]` with a note on exactly where you stopped and what is left.
 
-```markdown
-# Progress
+## Definition of done for a task
 
-Current step: <Day N, Task N.M — title>
-Status: <Not started | In progress | Done | Blocked>
+- It meets the task's acceptance criteria in `plan.md`.
+- It was manually checked (no test suite in this project), and the check is logged in the tracker.
+- The tracker is updated.
 
-| Day | Task | Status | Files | Manual check result |
-| --- | ---- | ------ | ----- | ------------------- |
-| 1 | 1.1 Local environment | Not started | | |
+## Code conventions
 
-## Log
+- Backend: Python 3.10+, FastAPI, SQLModel, Pydantic v2, type hints, async routes for I/O.
+- Frontend: Next.js with JSX (no TypeScript), plain CSS, all API calls through `frontend/lib/api.js`.
+- Prices in INR (integer rupees). Dates in UTC.
+- Return clear HTTP errors (400/401/403/404) with a short `detail` message.
 
-### <YYYY-MM-DD> — Day N Task N.M — <title>
-- Status:
-- Files changed:
-- Manual check: `<exact command>`
-- Observed:
-- Deviation from plan.md:
-```
+## Do not
 
-At the start of a session, print the current step and the top of the table so the
-user can see where the project stands.
+- Do not add: reviews/ratings, payouts, refunds, email, admin panel, vector search, Docker, OAuth, or anything else on the cut list in `plan.md`.
+- Do not refactor working code unless the current task needs it.
+- Do not mark a task done without verifying it.
+- Do not leave the tracker stale at the end of a session.
 
-## Scope rules
+## End of session
 
-- **Frozen scope.** Build only what `plan.md` lists. The "Out of scope" section of
-  `plan.md` is a hard no: no patch generation, Tree-sitter, embeddings,
-  multi-language support, persistence, pricing features, test suite, or CI.
-- **Ask before adding anything** not already in `plan.md` — a feature, endpoint,
-  file, dependency, or config knob. Log the answer in `Progress.md`.
-- **Never crash** is a product requirement, not a nicety. A bad diff, a malformed
-  model reply, an unindexed `/ask`, or a dead Ollama must degrade into a reported
-  reason with an HTTP 200.
-- **Do not write code files** unless the user has explicitly asked for implementation
-  in this session. `plan.md`, `AGENT.md` and `Progress.md` are documentation and are
-  always fair game.
-
-## Editing rules
-
-- Do not reformat, reorganize, or "clean up" files unrelated to the current step.
-- Do not touch existing user work without asking.
-- Commit at each day's exit criteria, not per file.
-
-## Reporting
-
-When reporting the outcome of a step, state plainly:
-1. Which step it was.
-2. What changed, by file.
-3. The exact manual check command and its actual output.
-4. Anything that deviates from `plan.md`, and what you did about it.
+Add a short entry to "Session log" in `progress_tracker.md`: date, what was completed, what is next, any open questions.

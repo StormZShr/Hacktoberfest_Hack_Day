@@ -1,361 +1,325 @@
-# RepoPilot AI — 3-Day MVP Plan
+# Launchpad: plan.md
 
-Local-first code review assistant. Python-only, offline once the model is pulled.
-No database, no auth, in-memory state only, manual acceptance checks only.
+A marketplace where students list their project demos and anyone can buy the project.
+A local open-weight model (**Ollama + gemma4:e2b**) runs the listing, quality-check, and buyer-assistant features.
 
-**Deadline: hard, 3 days.** Smallest working MVP. Nothing on this page is optional
-except where it is marked `[optional]`.
-
-## Ground rules
-
-- **Scope is frozen.** Everything not listed here is out of scope. Ask the user
-  before adding a feature, file, endpoint, dependency, or config knob.
-- **No test suite, no extra tooling.** Acceptance is manual, by command and eyeball.
-- **Never crash.** A bad model reply, a bad diff, or a dead Ollama degrades into a
-  `skipped` entry with a reason. `/review` must return 200 even when every file fails.
-- **Out of scope:** patch generation, Tree-sitter, embeddings, multi-language,
-  persistence, pricing-tier features, tests, linting, CI.
-- Update `Progress.md` at every task boundary (see `AGENT.md`).
-
-## Target file structure
-
-```
-backend/   main.py  diffparse.py  llm.py  repo.py  schemas.py  requirements.txt  samples/buggy.diff
-frontend/  package.json  app/page.jsx  app/layout.jsx
-           components/DiffInput.jsx  components/FindingsList.jsx  components/AskPanel.jsx
-           lib/api.js
-root       README.md
-```
-
-Run commands: `uvicorn main:app --reload --port 8000` (from `backend/`),
-`npx next dev` (from `frontend/`, port 3000). CORS allows `http://localhost:3000`.
-
-## Current state (start of Day 1)
-
-| Item | Status |
-| --- | --- |
-| `backend/main.py`, `diffparse.py`, `llm.py`, `schemas.py`, `samples/buggy.diff` | **Written, never executed** |
-| `backend/repo.py` | Does not exist |
-| `frontend/` | Does not exist |
-| `README.md` | Does not exist |
-| Python deps | Not installed (no venv) |
-| Ollama model | Not pulled |
-| Git history | No commits yet, everything untracked |
-
-Day 1 is therefore **verify and fix**, not build-from-scratch.
+**Deadline: 3 days. Smallest working MVP. Anything not listed here is out of scope; ask before adding it.**
 
 ---
 
-# Day 1 — backend `/health` and `/review` working against `samples/buggy.diff`
+## 1. Problem and pitch
 
-## Task 1.1 — Local environment
-**Files touched:** `backend/.venv/` (created), `.gitignore` (new)
+- Students build good projects that sit unused on GitHub. Buyers (juniors, other students, small teams) want working, explained projects but can't judge quality or fit quickly.
+- Sellers hate writing listings. Buyers can't tell what they're getting.
+- Launchpad fixes both with a local AI layer: it writes the listing, checks its quality, and answers buyer questions about the project.
 
-1. `python -m venv .venv` in `backend/`
-2. `.venv\Scripts\python -m pip install -r requirements.txt`
-3. Create root `.gitignore` with `.venv/`, `__pycache__/`, `node_modules/`, `.next/`
+**Why open-weight + local matters (for the submission write-up):**
+- **Privacy before purchase:** a seller's unpublished code and README are analyzed on the platform's own machine. They are never sent to a third-party AI API, so the paid asset isn't leaked before it's sold.
+- **Cost:** AI help is free per listing and per question, so the platform can offer it to every seller with no per-request bill.
+- **Control:** the model is swappable with one env var, and prompts and output schemas are fully inspectable.
+- **Honest limits:** e2b is a small model. It makes mistakes, so every AI output is advisory, validated, and editable by the human.
 
-**Acceptance criteria:** `fastapi`, `uvicorn`, `httpx`, `pydantic` all import inside
-the venv; the venv itself is not stageable by git.
-
-**Manual check:**
-```
-cd backend
-.venv\Scripts\python -c "import fastapi, uvicorn, httpx, pydantic; print('deps ok')"
-git status --short          # .venv/ must NOT appear
-```
-
-## Task 1.2 — Model pulled, health path proven
-**Files touched:** none (environment only)
-
-1. `ollama pull qwen2.5-coder:1.5b`
-2. Set `REPOPILOT_MODEL=qwen2.5-coder:1.5b` for the active shell.
-3. Call the Ollama layer directly, before FastAPI is involved.
-
-**Acceptance criteria:** `llm.health()` reports `ollama_up: True` **and**
-`model_pulled: True`. This deliberately separates "Ollama is broken" from
-"FastAPI is broken".
-
-**Manual check:**
-```
-cd backend
-.venv\Scripts\python -c "import llm; print(llm.health())"
-:: expect {'ollama_up': True, 'model': 'qwen2.5-coder:1.5b', 'model_pulled': True}
-```
-If this reports `ollama_up: False` while `ollama list` works, set
-`REPOPILOT_OLLAMA_HOST=http://127.0.0.1:11434` (Windows `localhost` may resolve to `::1`).
-
-## Task 1.3 — Structured output proven
-**Files touched:** none
-
-One direct `llm.chat_json()` call using the real `FINDINGS_JSON_SCHEMA`, with no
-HTTP server and no frontend in the loop.
-
-**Acceptance criteria:** the call returns a dict (not an error string), and the
-dict validates against `FileFindings`. This is the single highest-risk assumption
-in the project, so it is proven on its own.
-
-**Manual check:**
-```
-.venv\Scripts\python -c "import llm,schemas; d,e = llm.chat_json('You are a reviewer.','File: x.py\n\n1: return 1/0\n\nReturn the findings for this file.', schemas.FINDINGS_JSON_SCHEMA); print('error=',e); print('ok=', schemas.FileFindings.model_validate(d) if d else None)"
-```
-Pass = a `FileFindings` object prints. Fail = an error string prints.
-
-## Task 1.4 — `/health` over HTTP
-**Files touched:** `backend/main.py` (fix only, if needed)
-
-Start `uvicorn main:app --reload --port 8000` from `backend/` and hit the endpoint.
-
-**Acceptance criteria:** HTTP 200, body matches `HealthResponse` exactly
-(`ollama_up`, `model`, `model_pulled`).
-
-**Manual check:**
-```
-curl http://localhost:8000/health
-```
-Then `ollama stop qwen2.5-coder:1.5b` is **not** run here — but do confirm that
-stopping the Ollama server yields `{"ollama_up": false, ...}` and still HTTP 200.
-
-## Task 1.5 — `/review` against `samples/buggy.diff`
-**Files touched:** `backend/main.py`, `diffparse.py`, `schemas.py`, `llm.py` (fix only)
-
-`buggy.diff` is a seeded fixture, so this is a real acceptance test, not a smoke test.
-
-**Acceptance criteria:**
-- `files_reviewed == 2`, `skipped == []`
-- Findings sorted high -> medium -> low
-- Every `line` is within `1..max_line` for its file
-- Findings point at genuinely bad lines
-
-**Manual check:**
-```
-curl -s -X POST http://localhost:8000/review -H "Content-Type: application/json" ^
-  -d "{\"diff\": \"...\"}"
-```
-Easiest reliable form (avoids shell quoting):
-```
-cd backend
-.venv\Scripts\python -c "import json,httpx,pathlib; d=pathlib.Path('samples/buggy.diff').read_text(); r=httpx.post('http://localhost:8000/review', json={'diff':d}, timeout=600); print(r.status_code); print(json.dumps(r.json(), indent=2))"
-```
-Seeded defects to look for, by file:
-
-| File | Seeded defect |
-| --- | --- |
-| `config.py` | hardcoded `API_TOKEN` secret (high) |
-| `config.py` | `open()` without `with` — leaked handle (medium) |
-| `config.py` | `retry()` returns `limit` instead of `times` |
-| `config.py` | `DEFAULT_TIMEOUT / idx` — ZeroDivisionError on `idx=0` (high) |
-| `inventory.py` | mutable default `items=[]` (medium) |
-| `inventory.py` | `prices == None` instead of `is None` (low) |
-| `inventory.py` | `average_price` divides by `len(prices)` — zero-length crash (high) |
-| `inventory.py` | `find()` deletes before reading — KeyError (high) |
-| `inventory.py` | bare `except: pass` swallows errors (medium) |
-
-Note: with the 1.5b smoke model, several of these will be **missed**. That is an
-expected model-quality result, not a bug in the code. Judge the 2-file contract,
-sorting, and line numbering here; judge recall separately in Task 3.1.
-
-## Task 1.6 — Skip path proven, not just the happy path
-**Files touched:** `samples/buggy.diff` (read-only), `diffparse.py` (fix only)
-
-Post three degenerate bodies and confirm HTTP 200 each time.
-
-**Acceptance criteria:** each returns a `skipped` list with a meaningful reason and
-never a 500.
-1. `{"diff": "not a diff at all"}` -> skipped or empty, HTTP 200
-2. A diff containing only a deleted file -> `file deleted, nothing new to review`
-3. Ollama stopped -> every reviewable file skipped with an `ollama unreachable` reason
-
-**Manual check:** the three `curl`s above, checking `status_code` and the `skipped` text.
-
-## Day 1 exit criteria
-`/health` and `/review` both return 200; `buggy.diff` gives `files_reviewed == 2`
-with correctly sorted findings on real line numbers; all three degenerate inputs
-degrade gracefully. Commit.
+**Business model (hypothesis to validate, not market fact):** free to list, platform keeps a commission (e.g. 10%) on each sale.
 
 ---
 
-# Day 2 — Next.js UI, `/index`, `/ask`
+## 2. Users and core flows
 
-## Task 2.1 — Next.js scaffold
-**Files touched:** `frontend/package.json`, `frontend/app/layout.jsx`
-
-`next`, `react`, `react-dom`; scripts `dev`, `build`, `start`. JavaScript/JSX only —
-**no TypeScript**. Plain CSS only.
-
-**Acceptance criteria:** `next dev` serves a page on port 3000 with no build error;
-`next build` clean.
-
-**Manual check:** `cd frontend && npx next dev`, open `http://localhost:3000`,
-confirm the layout renders. Tab titles "Review" and "Ask" are visible.
-
-## Task 2.2 — API client
-**Files touched:** `frontend/lib/api.js`
-
-Single place holding `BASE = "http://localhost:8000"`, with `getHealth`, `postReview`,
-`postIndex`, `postAsk`.
-
-**Acceptance criteria:** no hardcoded backend URL anywhere outside this file;
-non-200 responses surface a readable error instead of throwing into the void.
-
-**Manual check:** in the browser console,
-`await fetch("http://localhost:8000/health").then(r=>r.json())` succeeds while the
-backend is up.
-
-## Task 2.3 — Review tab
-**Files touched:** `frontend/app/page.jsx`, `components/DiffInput.jsx`,
-`components/FindingsList.jsx`
-
-Textarea for the diff, a Review button, and a findings list. Render `skipped` visibly —
-a silently dropped file is worse than a bad finding.
-
-**Acceptance criteria:** pasting `samples/buggy.diff` and clicking Review renders
-findings with file, line, severity, title, explanation, suggestion, and shows
-`files_reviewed` plus any skipped entries.
-
-**Manual check:** paste the sample, click Review. Then paste `garbage` and confirm a
-clean "no findings / nothing parseable" state with no unhandled error.
-
-## Task 2.4 — `repo.py`: chunking and BM25 retrieval
-**Files touched:** `backend/repo.py` (new)
-
-- Walk `.py` files under a given path (skip `.venv`, `node_modules`, `__pycache__`, `.git`)
-- Chunk ~50 lines with small overlap, keeping file path and line range
-- Build an in-memory index; score queries with keyword/BM25, no embeddings
-- `TOP_K = 5` as a **fixed module constant in this file**, not configurable
-
-**Acceptance criteria:** indexing this very repo returns chunks with correct
-`path`, `start_line`, `end_line`; `TOP_K == 5`; a query for a distinctive identifier
-returns the chunk that contains it, first.
-
-**Manual check:**
-```
-cd backend
-.venv\Scripts\python -c "import repo; r=repo.index_repo('.'); print(len(r['chunks'])); print(repo.TOP_K); [print(c['path'], c['start_line'], c['end_line']) for c in repo.search('parse_diff')]"
-```
-A query for `parse_diff` must return `diffparse.py` as the top hit.
-
-## Task 2.5 — `/index` and `/ask`
-**Files touched:** `backend/main.py`, `backend/schemas.py` (new models)
-
-`/index` takes a local repo path and returns a summary (files walked, chunks built).
-`/ask` retrieves the top `TOP_K` chunks and asks the model, which must answer with
-`file:line` references. The index lives in memory — restarting the server clears it.
-
-**Acceptance criteria:** `/index` then `/ask` works against a local Python repo;
-the answer cites `file:line` from the retrieved chunks; asking before indexing
-returns a clear "nothing indexed" message, not a 500.
-
-**Manual check:**
-```
-curl -X POST http://localhost:8000/index -H "Content-Type: application/json" -d "{\"path\": \"C:/path/to/local/python/repo\"}"
-curl -X POST http://localhost:8000/ask  -H "Content-Type: application/json" -d "{\"question\": \"How is the diff split per file?\"}"
-```
-Expected: an answer referencing real `file:line` locations that exist.
-
-## Task 2.6 — Ask tab
-**Files touched:** `frontend/components/AskPanel.jsx`, `frontend/app/page.jsx`
-
-Path input + Index button, question input + Ask button, answer display. Existing
-tab state in `page.jsx` must not re-mount the Review tab's textarea on switch.
-
-**Acceptance criteria:** full flow works from the browser with no console errors;
-Review findings survive a tab switch.
-
-**Manual check:** review the sample, switch to Ask, index, ask, switch back —
-the findings are still on screen.
-
-## Day 2 exit criteria
-Browser-only demo: paste a diff -> get sorted findings; index a local repo -> ask a
-question -> get an answer with `file:line` citations. Commit.
+| Role | Flow |
+|---|---|
+| **Seller (student)** | Register → paste README/description → **AI autofills listing** → upload ZIP + demo link → **AI quality check** → publish → see sales |
+| **Buyer** | Browse/search (**AI natural-language search**) → open project → **ask the AI about it** → buy → download |
 
 ---
 
-# Day 3 — real repo, README, cold-start rehearsal
+## 3. Where gemma4:e2b is critical
 
-## Task 3.1 — One real open-source Python repo
-**Files touched:** none (do not add sample files; use a temp path outside the repo)
+The model is not decoration. Remove it and the product loses its core flows.
 
-Pick **one small** Python repo, ideally one already on disk. Generate a diff to a
-temp file rather than committing anything.
+| # | Feature | Input → Output | Notes |
+|---|---|---|---|
+| A1 | **Listing autofill** | Raw README/description → structured listing: title, tagline, description, tech stack, category, difficulty, "what you get", 3 demo talking points | Schema-constrained JSON. Seller edits before saving. |
+| A2 | **Pre-publish quality check** | Listing + README → score 0–100, missing items (setup steps, license, screenshots, tests), risk flags, fix suggestions | Advisory. Hard checks (title, price, file, demo link) are deterministic code, not AI. |
+| A3 | **Ask the project** (buyer) | Question + that project's listing/README → answer grounded only in that text, or "not in the listing" | Model gets only that project's text. No tools, no web. |
+| A4 | **Smart search** (stretch) | "react project with auth under ₹500" → filters `{tech, category, max_price, keywords}` → SQL query | Model only extracts filters. SQL is built by code, never by the model. |
 
-**Acceptance criteria:** `/review` on a real diff returns either findings or clean
-`skipped` reasons within the 180 s per-file timeout, and `/ask` over the same repo
-cites real locations.
-
-**Manual check:**
-```
-git -C C:/path/to/repo diff HEAD~1 -- "*.py" > $env:TEMP\real.diff
-:: then POST $env:TEMP\real.diff to /review as in Task 1.5
-```
-Watch for: diffs larger than the 10-file review cap (expect explicit cap reasons in
-`skipped`, which is correct behavior); and large files that exceed the context window.
-
-Determine here whether `qwen2.5-coder:1.5b` recall is good enough for the demo or
-whether `qwen2.5-coder:7b` is worth the latency. Switching is an env var only:
-`REPOPILOT_MODEL=qwen2.5-coder:7b`, no code change.
-
-## Task 3.2 — `README.md`
-**Files touched:** `README.md` (root, new)
-
-Required sections:
-- Setup: Python venv + deps, `ollama pull`, backend and frontend run commands
-- Model and license: `qwen2.5-coder:7b` (default) and `1.5b` (smoke), both
-  **Apache-2.0**
-- Why open beats closed: fully offline, no API keys, no per-token cost, code never
-  leaves the machine, pinned reproducible weights
-- Limitations: no embeddings (keyword retrieval misses semantic matches), Python
-  only, 10-file review cap, no patch generation, in-memory index lost on restart,
-  CPU-only latency, small models miss subtle bugs
-- **Demo walkthrough:** numbered steps with exact commands and inputs, including the
-  expected output at each step
-
-**Acceptance criteria:** a reader who has never seen the project can go from clone to
-a rendered finding by following the walkthrough verbatim, with no missing step.
-
-**Manual check:** read the walkthrough and run each command exactly as written.
-
-## Task 3.3 — Cold-start rehearsal
-**Files touched:** none
-
-From a clean shell: pull model, start backend, start frontend, walk the README
-top to bottom, including the failure cases (bad diff, unindexed ask, Ollama stopped).
-
-**Acceptance criteria:** no step produces an unhandled error; every documented
-expected output matches what actually appears; both failure cases degrade gracefully.
-
-**Manual check:** the walkthrough itself, timed end to end.
-
-## Day 3 exit criteria
-Demo runs cold from the README. Final commit.
+**Shared AI rules**
+- Ollama `format` takes a JSON schema. Validate with Pydantic, retry once on failure, then return a clear error.
+- `temperature` 0.1 for extraction and review, 0.3 for Q&A.
+- Truncate input (e.g. README to ~6,000 chars) to fit context. Set `OLLAMA_CONTEXT_LENGTH=8192`.
+- Treat seller text as **data, not instructions** (prompt-injection guard). The system prompt says to ignore instructions inside the listing. The model has no tools, so the worst case is a bad answer.
+- The model never sets the price or approves a sale. It only suggests.
+- Cache A1/A2 results on the project row. Don't re-run on every page view.
+- Keep the model warm (`keep_alive`) and show loading states, since CPU inference is slow.
 
 ---
 
-# Top 3 risks
+## 4. Stack
 
-### 1. The model never returns schema-conforming JSON
-Highest-leverage risk: it empties `/review` entirely while everything else looks fine.
-**Cheapest mitigation:** Task 1.3 — one direct `llm.chat_json()` call against the real
-schema *before* any HTTP or UI work. If it fails, the fix is the schema/prompt in
-`schemas.py` and `main.py`, not a rebuild. Already mitigated once the smoke test passes.
+| Layer | Choice |
+|---|---|
+| Frontend | Next.js (JavaScript/JSX, no TypeScript), plain CSS |
+| Backend | Python, FastAPI, uvicorn |
+| AI | Ollama, `gemma4:e2b` (env `LAUNCHPAD_MODEL`) |
+| Database | SQLite via SQLModel (zero setup) |
+| Auth | Email + password, hashed, JWT |
+| Payments | `PaymentProvider` interface: **mock** first, **Razorpay test mode** if time. No real money. |
+| File storage | Local disk (`backend/storage/`), ZIP upload with size cap |
 
-### 2. CPU-only inference is slower than the 180 s `CHAT_TIMEOUT`
-This box has 15.7 GB RAM, 12 threads and integrated graphics only. A 7b model over a
-few hundred injected lines may blow the timeout and return everything as `skipped`.
-**Cheapest mitigation:** time exactly one file first (Task 1.5), then set
-`REPOPILOT_MODEL=qwen2.5-coder:1.5b` for the demo. Pure env var, zero code change.
+**Dependencies (confirm before installing):**
+- backend: `fastapi`, `uvicorn`, `httpx`, `pydantic`, `sqlmodel`, `python-multipart`, `PyJWT`, `bcrypt`, `razorpay` (stretch)
+- frontend: `next`, `react`, `react-dom`
 
-### 3. Day 3 depends on a real repo that may not be available on the day
-Network access, clone size, or a diff full of binary/non-Python files can eat the
-last day. **Cheapest mitigation:** use a Python repo already on disk; restrict the diff
-with `-- "*.py"`; if none exists, fall back to a second hand-written sample diff in
-the existing `samples/` directory — the same fixture pattern already used by
-`buggy.diff`, so nothing new is invented.
+Two swaps from the original list, both forced by this machine (Python 3.15, no MSVC):
+- `uvicorn[standard]` → `uvicorn`. The extra pulls `pyyaml`, which has no 3.15 wheel and fails to build without C++ build tools. `--reload` still works (StatReload).
+- `passlib[bcrypt]` → `bcrypt` directly. passlib 1.7.4 (last release 2020) breaks against bcrypt 5 (`_bcrypt.__about__`). Older pip-only wheel and bcrypt hardening against >72-byte inputs make the direct call simpler than patching passlib.
+
+**UI design:** all frontend work starts by loading the `frontend-design` skill (`.opencode/skills/frontend-design`) and writing a short design plan — palette, type, layout, principles — before any CSS is written. The plan is reviewed against the brief before building, and the pages are built to match it, so the UI does not read as stack-agnostic defaults. This adds no dependencies: plain CSS, one global stylesheet (`frontend/app/globals.css`, which Next.js requires), inside the structure in section 5.
+
+### Frontend design plan (written before any CSS)
+
+**Brief.** Launchpad is a noticeboard where Indian engineering students list working projects and juniors buy them. Two audited facts shape the design: every listing carries an AI quality score that ran on this machine, and the seller's code and README never render to a buyer.
+
+**Visual concept.** A college project-exhibition board. Listings are index cards pinned to board paper: a strip of tape, a hand-placed tilt, a hairline ink rule, a marigold price tag, and a red rubber stamp carrying the quality score. The stamp is the one loud element — it is the product's differentiator and it is data, not decoration.
+
+**Color (6).**
+`--ink #1B2440` indigo: body text, page frame, button fill · `--paper #EFEFE9` green-cast recycled paper: page ground (deliberately not cream) · `--paper-2 #E3E2D9` ruled paper: card tops, dividers · `--ink-soft #575F7A` secondary text · `--marigold #E39B2C` price tags, primary action, focus ring (ink on marigold, never marigold text on paper) · `--stamp #B4372A` the quality stamp, risk flags, "not in the listing" · `--verified #2E6B4F` grounded answers, paid and download-ready.
+
+**Type** (offline system stacks; plan's frontend deps stay `next`, `react`, `react-dom`).
+- Display: Palatino / Iowan / Book Antiqua serif for the wordmark, listing titles and page headings. A printed notice, not a hero banner.
+- Body and UI: Segoe UI Variable Text / `system-ui`; line length capped at 68ch.
+- Numbers (price, score): same sans with `font-variant-numeric: tabular-nums`, so columns align without a monospace data-label look.
+- Uppercase appears only inside the rubber stamp, which is genuinely uppercase.
+
+**Layout.** Left-aligned throughout, nothing centred.
+
+```
+BROWSE
+  Launchpad                                          [ Sign in ]
+  Student projects you can buy and run today.
+  [ search…                    ] [ category ][ tech ][ ₹ max ][ Go ]
+  ┌ tape ──────────────┐   ┌ tape ──────────────┐
+  │ StudyBuddy         │   │ MessMate           │
+  │ title / tagline    │   │                    │
+  │ tech, tech, tech   │   │ tech, tech         │
+  │ (stamp)     ₹499 ⬦ │   │ (stamp)    ₹199 ⬦  │
+  └────────────────────┘   └────────────────────┘
+
+DETAIL (single sheet, 68ch column; buy panel pinned right on wide screens)
+  StudyBuddy: flashcards from your notes
+  tagline · ml-ai, difficulty: intermediate · ₹499 tag
+  what you get (list)   |  ask the project (margin note, marigold rule)
+  demo points 1-3       |  [ Buy ₹499 ]  or  [ Download ZIP ]
+```
+
+- Board: pinned cards, 3-up ≥1100px, 2-up ≥700px, 1-up below. No drop shadows and no border-radius; separation comes from the paper rule and the tilt (±0.5deg).
+- Card: tape strip, full-width serif title, tagline, comma-separated tech, then a foot row where the rotated quality stamp sits next to the clipped marigold price tag, with an ink "DRAFT" note on the seller's own drafts.
+- sell/new is an answer sheet: README textarea on ruled lines, **Fill from my README**, then the listing rows, then a step strip — Save draft, Check quality, Publish ZIP — where each step shows its state (ink = next, verified green = done, stamp red = blocked).
+- Motion, two moments only: the stamp lands (scale 1.08 → 1, 180ms) when a score arrives, and the ask answer unrolls when it arrives. Both respect `prefers-reduced-motion`.
+- States: empty board invites a first listing and links to sell/new; errors say what failed and the next action; loading says the check is running on this machine instead of showing a bare spinner.
+
+**Principles.**
+1. The quality stamp is the hero: one loud rotated device per card, carrying a real score and the words that it ran locally.
+2. Everything is pinned paper: tape, tilt, hairline, clipped tag. Physicality replaces the SaaS card kit.
+3. Two faces, both offline; sentence case everywhere except the stamp.
+4. Privacy is shown, not claimed: the README is never sent to a buyer, and the stamp says where the check ran.
+5. Quiet around the stamp: no ALL-CAPS labels, no middle-dot meta strings, no "→" on buttons, no fade-up sections.
+
+**Self-critique before building.** Not cream-and-terracotta (indigo, marigold, green-cast paper). Not near-black with one acid accent. Not broadsheet: cards are pinned and tilted, not hairline newspaper columns. Not the SaaS card kit: no radius, no shadows, and cards differ by stamp and tilt. No big-number-gradient hero — the board of real listings is the hero. Numbered markers only on the demo talking points, which really are a sequence. The uppercase stamp is one deliberate material exception. Residual risk: paper plus serif can drift toward a craft brochure; the marigold tag, tape and stamp keep it a college noticeboard. Palette contrast is checked in the browser before this is called done.
 
 ---
 
-# Out of scope — do not build
+## 5. File structure
 
-Patch generation or auto-fix. Tree-sitter parsing. Embeddings or a vector store.
-Languages other than Python. Any database or persistence. Auth, accounts, rate
-limits, pricing tiers. Test suite, linter config, CI. A demo script.
+```
+launchpad/
+├── plan.md
+├── README.md
+├── AGENTS.md
+├── backend/
+│   ├── main.py              # app, CORS, router registration, /health
+│   ├── config.py            # env: model, ollama url, jwt secret, limits
+│   ├── db.py                # engine, session, create tables
+│   ├── models.py            # User, Project, Order (SQLModel)
+│   ├── schemas.py           # request/response + AI output schemas
+│   ├── auth.py              # hashing, JWT, current_user dependency
+│   ├── seed.py              # demo sellers + 4-5 sample projects
+│   ├── routers/
+│   │   ├── auth.py          # register, login, me
+│   │   ├── projects.py      # CRUD, publish, upload, download (gated)
+│   │   ├── ai.py            # autofill, review, ask, search
+│   │   └── orders.py        # create order, confirm/webhook, my orders
+│   ├── services/
+│   │   ├── llm.py           # Ollama client: schema call, retry, validate
+│   │   ├── prompts.py       # system prompts for A1-A4
+│   │   ├── payments.py      # PaymentProvider: MockProvider, RazorpayProvider
+│   │   └── storage.py       # save/serve ZIPs, size/type checks
+│   ├── storage/             # uploaded ZIPs (gitignored)
+│   └── requirements.txt
+└── frontend/
+    ├── package.json
+    ├── app/
+    │   ├── globals.css              # the whole design system (plain CSS)
+    │   ├── layout.jsx               # masthead, auth-aware nav
+    │   ├── page.jsx                 # browse + smart search
+    │   ├── login/page.jsx
+    │   ├── sell/new/page.jsx        # autofill + review + publish
+    │   ├── projects/[id]/page.jsx   # detail, ask-AI, buy
+    │   └── dashboard/page.jsx       # my listings/sales, my purchases
+    ├── components/
+    │   ├── ProjectCard.jsx
+    │   ├── SearchBar.jsx
+    │   ├── ListingForm.jsx
+    │   ├── ReviewPanel.jsx          # score + missing items
+    │   ├── AskBox.jsx
+    │   └── BuyButton.jsx
+    └── lib/
+        ├── api.js
+        └── auth.js
+```
+
+---
+
+## 6. High-level design
+
+```
+Next.js (3000) ──HTTP/JSON──> FastAPI (8000) ──> SQLite + storage/
+                                   │
+                                   └──> Ollama (11434) ──> gemma4:e2b   (local, offline)
+```
+
+**Data model**
+- `User`: id, email, name, password_hash, created_at
+- `Project`: id, seller_id, title, tagline, description, tech_stack (JSON), category, difficulty, what_you_get (JSON, from A1), demo_points (JSON, from A1), price_inr, demo_url, readme_text, file_path, status (`draft`/`published`), ai_score, ai_review (JSON), created_at
+- `Order`: id, project_id, buyer_id, amount_inr, provider, provider_ref, status (`pending`/`paid`/`failed`), created_at
+
+**Endpoints**
+- Auth: `POST /auth/register`, `POST /auth/login`, `GET /auth/me`
+- Projects: `GET /projects` (q, category, tech, max_price), `GET /projects/mine` (the seller's own listings, drafts included), `GET /projects/{id}`, `POST /projects`, `PUT /projects/{id}`, `POST /projects/{id}/file`, `POST /projects/{id}/publish`, `GET /projects/{id}/download` (paid buyers and the seller only)
+- AI: `POST /ai/autofill`, `POST /ai/review`, `POST /projects/{id}/ask`, `POST /ai/search` (stretch). Autofill and review require a login, since they run the local model; ask does not, because it is part of browsing (it reads one published listing and never writes).
+- Orders: `POST /orders`, `POST /orders/{id}/confirm` (mock) or `POST /webhooks/razorpay`, `GET /orders/me`
+- `GET /health`: Ollama up, model pulled, DB ok
+
+**Visibility rules**
+- `GET /projects` and `GET /projects/{id}` serve published projects only. A draft is visible to its seller through `?`-free `GET /projects/{id}` with their token, and to nobody else (404, not 403, so drafts aren't leaked).
+- Publishing and editing are owner-only; `GET /orders/me` is per-buyer.
+
+**Rules enforced by code, not AI**
+- Publish requires: title, price ≥ 0, demo URL or file, and a completed AI review run (the score itself is advisory).
+- Download requires a `paid` order for that buyer, or being the seller.
+- Seller can only edit their own projects.
+- Upload: ZIP only, size capped (e.g. 25 MB).
+
+---
+
+## 7. Three-day plan
+
+### Day 1: Backend core + AI service
+- `config.py`, `db.py`, `models.py`, `schemas.py`, `auth.py`, auth router
+- `services/llm.py` with schema-constrained call, validation, retry, input truncation
+- `services/prompts.py` and `routers/ai.py`: **A1 autofill** and **A2 review**
+- `routers/projects.py`: create, update, list, get, publish
+- `seed.py`
+
+**Done when:**
+- `/health` reports the model pulled
+- Posting a sample README to `/ai/autofill` returns valid listing JSON
+- `/ai/review` returns a score and a missing-items list for a deliberately weak listing
+- Register → login → create → publish works via curl
+
+### Day 2: Frontend + buying
+- **Load the `frontend-design` skill and write the short design plan** (palette, type, layout, principles) before writing any frontend CSS
+- Next.js pages: browse, project detail, login, sell/new, dashboard
+- A1 and A2 wired into `sell/new` (autofill button, review panel with loading states)
+- **A3 Ask-the-project** on the detail page
+- `storage.py`, upload and gated download
+- `payments.py` with `MockProvider`, `routers/orders.py`, `BuyButton`
+
+**Done when:**
+- A seller can go from pasted README to a published listing in the UI
+- A buyer can ask a question, "buy" with the mock provider, and download the ZIP
+- A non-buyer gets 403 on download
+
+### Day 3: Payment, search, polish, submission
+- Razorpay test mode behind the same `PaymentProvider` interface (fallback: keep mock)
+- **A4 smart search** if Days 1-2 finished early
+- Seed realistic demo data, fix the rough edges in the demo path, empty/error states, polish the UI against the Day 2 design plan (`frontend-design` skill for the second pass)
+- README: setup, model and licence, why local open-weight beats closed here, limitations, **demo walkthrough**
+- Record the 2-3 minute demo (morning, not last minute)
+
+**Done when:** a fresh clone runs end to end from the README, and the demo video is recorded.
+
+---
+
+## 8. Demo walkthrough (target 2-3 min)
+
+1. Show Ollama running locally with `gemma4:e2b` (no internet needed for AI).
+2. Seller pastes a README → **autofill** produces the listing.
+3. **Quality check** flags a missing item → seller fixes it → publish.
+4. Buyer opens the listing → asks "Does it include auth? How do I run it?" → grounded answer.
+5. Buyer buys (test checkout) → downloads the ZIP.
+6. Closing line: the AI ran on a local open model, and the seller's code never left the machine.
+
+---
+
+## 9. Cut list (mention as roadmap in the README)
+
+Reviews/ratings, seller payouts, refunds, email notifications, admin panel, real-money payments, embeddings/vector search, multi-file preview, OAuth login, license generation, Docker.
+
+**Fallbacks if behind schedule**
+- Replace JWT auth with email-only identity.
+- Keep the mock payment provider.
+- Drop A4.
+- Never drop A1-A3, since they are the open-model story.
+
+---
+
+## 10. Risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| e2b output is malformed or low quality | JSON-schema `format` + Pydantic validation + one retry; human edits everything; test prompts on 3 sample READMEs on Day 1 |
+| Slow responses on CPU | Keep model warm, truncate inputs, loading states, cache A1/A2 results |
+| Scope creep (auth, payments, uploads add up) | Fixed cut list and fallbacks above; no new features without asking |
+| Payment integration eats Day 3 | Mock provider is the default; Razorpay is behind the same interface |
+| Prompt injection via README | Seller text treated as data; model has no tools or write access |
+| Windows Smart App Control / Ollama setup issues | Ollama already runs via WSL; keep one Ollama server only |
+| Bad AI claims about a project (hallucination) | A3 answers only from that project's text, says "not in the listing" otherwise; label AI output in the UI |
+
+---
+
+## 11. Environment
+
+```
+LAUNCHPAD_MODEL=gemma4:e2b
+OLLAMA_URL=http://localhost:11434
+OLLAMA_CONTEXT_LENGTH=8192      # set on the Ollama server
+JWT_SECRET=change-me
+MAX_UPLOAD_MB=25
+PAYMENT_PROVIDER=mock           # or razorpay
+RAZORPAY_KEY_ID=...             # test mode only
+RAZORPAY_KEY_SECRET=...
+```
+
+Optional extras, all with working defaults in `backend/config.py`: `JWT_EXPIRE_MINUTES`, `README_MAX_CHARS` (input truncation, 6000), `OLLAMA_KEEP_ALIVE`, `LLM_TIMEOUT_SECONDS` (CPU inference is slow), `DATABASE_URL`, `STORAGE_DIR`, `CORS_ORIGINS`.
+
+`JWT_SECRET=change-me` is a 9-byte dev default and PyJWT warns about it. Fine for the demo; set a 32+ byte secret before anything real.
+
+Run: `ollama pull gemma4:e2b`, `uvicorn main:app --reload --port 8000` (backend), `npm run dev` (frontend, port 3000).
+
+---
+
+## 12. Reuse from RepoPilot
+
+The Ollama structured-output pattern in the earlier `backend/main.py` (schema in `format`, Pydantic validation, per-call error handling) carries over into `services/llm.py`. The diff-review code and endpoints are dropped.
+
+---
+
+## 13. Definition of done
+
+- [ ] Seller: paste README → autofill → review → publish, all in the UI
+- [ ] Buyer: search, ask the AI, buy (test mode), download
+- [ ] Download blocked without a paid order
+- [ ] All AI calls go to local `gemma4:e2b`, with no external AI API
+- [ ] README with setup, licence note, limitations, demo walkthrough
+- [ ] Demo video recorded

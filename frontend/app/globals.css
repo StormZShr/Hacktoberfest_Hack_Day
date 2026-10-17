@@ -1,0 +1,751 @@
+/* Launchpad design system. Single stylesheet, plain CSS (plan.md section 4).
+   Concept: a college project noticeboard. Pinned index cards, tape, marigold
+   price tags, and a red rubber stamp carrying the AI quality score. */
+
+:root {
+  --ink: #1b2440;
+  --ink-soft: #575f7a;
+  --paper: #efefe9;
+  --paper-2: #e3e2d9;
+  --marigold: #e39b2c;
+  --stamp: #b4372a;
+  --verified: #2e6b4f;
+  --rule: rgba(27, 36, 64, 0.22);
+  --radius: 2px;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+a {
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--marigold);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* --- shell and masthead --------------------------------------------------- */
+
+.shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px 72px;
+}
+
+.masthead {
+  border-bottom: 2px solid var(--ink);
+  padding: 28px 0 16px;
+  margin-bottom: 28px;
+}
+
+.masthead-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.wordmark {
+  font-family: var(--display);
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.masthead-line {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+}
+
+.nav {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.nav-link {
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+}
+
+.nav-link:hover {
+  border-bottom-color: var(--ink);
+}
+
+.nav-user {
+  color: var(--ink-soft);
+}
+
+/* --- buttons -------------------------------------------------------------- */
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--paper-2);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--marigold);
+  border-color: var(--marigold);
+  color: var(--ink);
+}
+
+.btn-tag {
+  background: var(--marigold);
+  border-color: var(--marigold);
+  color: var(--ink);
+}
+
+.btn-tag:hover:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.btn-quiet {
+  border-color: var(--rule);
+  font-weight: 400;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* --- search strip --------------------------------------------------------- */
+
+.search-strip {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  background: var(--paper-2);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 0 0 28px;
+}
+
+.search-strip .field {
+  margin: 0;
+}
+
+.search-input {
+  min-width: 260px;
+  flex: 1 1 260px;
+}
+
+/* --- fields --------------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin: 0 0 16px;
+}
+
+.field-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.input,
+.textarea,
+.select {
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.textarea {
+  min-height: 150px;
+  line-height: 1.5;
+  background-image: repeating-linear-gradient(
+    var(--paper),
+    var(--paper) 26px,
+    var(--rule) 26px,
+    var(--rule) 27px
+  );
+  background-attachment: local;
+}
+
+.hint {
+  color: var(--ink-soft);
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+
+.readme-note {
+  border-left: 3px solid var(--verified);
+  padding: 8px 0 8px 12px;
+  color: var(--ink-soft);
+  max-width: 68ch;
+}
+
+/* --- board and cards ------------------------------------------------------ */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.card {
+  position: relative;
+  background: #f7f6f1;
+  border: 1.5px solid var(--ink);
+  padding: 24px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 230px;
+}
+
+.card:nth-child(odd) {
+  transform: rotate(-0.5deg);
+}
+
+.card:nth-child(even) {
+  transform: rotate(0.4deg);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 22px;
+  width: 74px;
+  height: 20px;
+  background: var(--marigold);
+  opacity: 0.55;
+  transform: rotate(-2deg);
+}
+
+.card-title {
+  font-family: var(--display);
+  font-size: 23px;
+  line-height: 1.2;
+  margin: 0;
+  max-width: 90%;
+}
+
+.card-title a {
+  text-decoration: none;
+}
+
+.card-title a:hover {
+  text-decoration: underline;
+}
+
+.card-tagline {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.card-tech {
+  margin: auto 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.card-foot .stamp {
+  margin-right: auto;
+  margin-left: -2px;
+}
+
+.price-tag {
+  display: inline-block;
+  background: var(--marigold);
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 14px 3px 10px;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%);
+}
+
+.draft-note {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+  border: 1.5px dashed var(--ink);
+  padding: 1px 8px;
+}
+
+/* The stamp sits in the card foot, next to the price tag. It was originally
+   pinned over the top-right corner, but screenshot review showed it covering
+   long titles, so legibility won. */
+.stamp {
+  display: inline-block;
+  border: 2px solid var(--stamp);
+  color: var(--stamp);
+  padding: 5px 8px 6px;
+  text-align: center;
+  transform: rotate(-4deg);
+  line-height: 1.15;
+  max-width: 108px;
+}
+
+.stamp-label {
+  display: block;
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.stamp-score {
+  display: block;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stamp-note {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.stamp[data-fresh="true"] {
+  animation: stamp-land 180ms ease-out;
+}
+
+@keyframes stamp-land {
+  from {
+    transform: rotate(-4deg) scale(1.14);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(-4deg) scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- sheet, detail page --------------------------------------------------- */
+
+.page-head {
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 14px;
+  margin-bottom: 22px;
+}
+
+.page-title {
+  font-family: var(--display);
+  font-size: 32px;
+  line-height: 1.15;
+  margin: 0;
+  max-width: 68ch;
+}
+
+.meta-line {
+  color: var(--ink-soft);
+  margin: 6px 0 0;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+
+.prose {
+  max-width: 68ch;
+}
+
+.panel {
+  background: var(--paper-2);
+  border: 1.5px solid var(--ink);
+  padding: 18px;
+}
+
+.panel + .panel {
+  margin-top: 22px;
+}
+
+.panel-title {
+  font-family: var(--display);
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+
+.bullets,
+.points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bullets li {
+  position: relative;
+  padding-left: 18px;
+  margin-bottom: 8px;
+}
+
+.bullets li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  width: 8px;
+  height: 8px;
+  background: var(--ink);
+}
+
+.points {
+  counter-reset: point;
+}
+
+.points li {
+  position: relative;
+  padding-left: 34px;
+  margin-bottom: 10px;
+  counter-increment: point;
+}
+
+.points li::before {
+  content: counter(point);
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--marigold);
+}
+
+/* --- ask the project ------------------------------------------------------ */
+
+.ask {
+  border-left: 4px solid var(--marigold);
+  padding-left: 16px;
+}
+
+.ask-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.ask-answer {
+  animation: unroll 220ms ease-out;
+  border-top: 1px solid var(--rule);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+@keyframes unroll {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.grounded-note {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.grounded-note[data-grounded="true"] {
+  color: var(--verified);
+}
+
+.grounded-note[data-grounded="false"] {
+  color: var(--stamp);
+}
+
+/* --- review panel --------------------------------------------------------- */
+
+.review-score {
+  margin: 0 0 12px;
+}
+
+.review-summary {
+  margin: 0 0 14px;
+  max-width: 68ch;
+}
+
+.missing,
+.flags {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.missing li {
+  border-bottom: 1px dashed var(--rule);
+  padding: 5px 0;
+}
+
+.missing li::before {
+  content: "Missing: ";
+  font-weight: 600;
+  color: var(--stamp);
+}
+
+.flags li {
+  color: var(--stamp);
+  margin-bottom: 6px;
+}
+
+.flags li::before {
+  content: "Risk: ";
+  font-weight: 600;
+}
+
+/* --- steps (sell/new) ----------------------------------------------------- */
+
+.steps {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  padding: 12px 0;
+  margin: 0 0 24px;
+}
+
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--ink-soft);
+}
+
+.step-dot {
+  width: 9px;
+  height: 9px;
+  background: var(--rule);
+  display: inline-block;
+}
+
+.step[data-state="next"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.step[data-state="next"] .step-dot {
+  background: var(--ink);
+}
+
+.step[data-state="done"] {
+  color: var(--verified);
+}
+
+.step[data-state="done"] .step-dot {
+  background: var(--verified);
+}
+
+.step[data-state="blocked"] {
+  color: var(--stamp);
+}
+
+.step[data-state="blocked"] .step-dot {
+  background: var(--stamp);
+}
+
+/* --- dashboard rows ------------------------------------------------------- */
+
+.rows {
+  display: grid;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--rule);
+  padding: 10px 0;
+}
+
+.row-main {
+  flex: 1 1 320px;
+}
+
+.row-title {
+  font-family: var(--display);
+  font-size: 19px;
+  margin: 0;
+}
+
+.row-meta {
+  color: var(--ink-soft);
+  font-size: 14px;
+  margin: 2px 0 0;
+}
+
+.status-paid {
+  color: var(--verified);
+  font-weight: 600;
+}
+
+.status-pending {
+  color: var(--stamp);
+  font-weight: 600;
+}
+
+/* --- notes and states ----------------------------------------------------- */
+
+.section-title {
+  font-family: var(--display);
+  font-size: 24px;
+  margin: 34px 0 12px;
+}
+
+.error-note {
+  border-left: 4px solid var(--stamp);
+  color: var(--stamp);
+  padding: 8px 0 8px 12px;
+  margin: 0 0 16px;
+  max-width: 68ch;
+}
+
+.ok-note {
+  border-left: 4px solid var(--verified);
+  color: var(--verified);
+  padding: 8px 0 8px 12px;
+  margin: 0 0 16px;
+  max-width: 68ch;
+}
+
+.loading-note {
+  color: var(--ink-soft);
+  border-left: 4px solid var(--marigold);
+  padding: 8px 0 8px 12px;
+  max-width: 68ch;
+}
+
+.empty {
+  border: 1.5px dashed var(--ink);
+  padding: 26px;
+  max-width: 68ch;
+}
+
+.empty-title {
+  font-family: var(--display);
+  font-size: 21px;
+  margin: 0 0 6px;
+}
+
+.empty .btn {
+  margin-top: 10px;
+}
+
+.footer {
+  border-top: 1px solid var(--rule);
+  margin-top: 48px;
+  padding-top: 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  max-width: 68ch;
+}
+
+/* --- responsive ----------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .card,
+  .card:nth-child(odd),
+  .card:nth-child(even) {
+    transform: none;
+  }
+  .wordmark {
+    font-size: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp[data-fresh="true"],
+  .ask-answer {
+    animation: none;
+  }
+}

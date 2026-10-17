@@ -1,90 +1,192 @@
-"""Pydantic models for RepoPilot AI.
+"""Request/response schemas plus the AI output schemas (A1-A3).
 
-Every model in this file is hand-written and validated at the API boundary, so a
-bad model reply becomes a skipped file instead of a 500.
+The AI schemas are also the JSON schemas handed to Ollama, so keep them small,
+flat, and explicit: a small model does better with enums than with prose.
 """
 
-from __future__ import annotations
+from datetime import datetime
+from typing import Any, Literal
 
-from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from pydantic import BaseModel, Field
+CATEGORIES = (
+    "web-app",
+    "mobile-app",
+    "ml-ai",
+    "cli-tool",
+    "library",
+    "game",
+    "data",
+    "other",
+)
+DIFFICULTIES = ("beginner", "intermediate", "advanced")
 
-Severity = Literal["high", "medium", "low"]
 
-# Used to sort findings: high first, then medium, then low.
-SEVERITY_ORDER: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
+# --- Auth -------------------------------------------------------------------
 
 
-class Finding(BaseModel):
-    """A single review finding, as returned to the client."""
+class RegisterRequest(BaseModel):
+    email: str
+    name: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=8, max_length=128)
 
-    file: str
-    line: int = Field(ge=1)
-    severity: Severity
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    name: str
+    created_at: datetime
+
+
+# --- Projects ---------------------------------------------------------------
+
+
+class ListingFields(BaseModel):
+    """The part of a project that A1 fills in. Seller-editable, so permissive."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    title: str = Field(default="", max_length=120)
+    tagline: str = Field(default="", max_length=200)
+    description: str = ""
+    tech_stack: list[str] = Field(default_factory=list)
+    category: str = ""
+    difficulty: str = ""
+    what_you_get: list[str] = Field(default_factory=list)
+    demo_points: list[str] = Field(default_factory=list)
+    price_inr: int = Field(default=0, ge=0)
+    demo_url: str = ""
+
+
+class ProjectCreate(ListingFields):
+    readme_text: str = ""
+
+
+class ProjectUpdate(BaseModel):
+    """Every field optional: a partial update of the seller's own draft."""
+
+    title: str | None = Field(default=None, max_length=120)
+    tagline: str | None = Field(default=None, max_length=200)
+    description: str | None = None
+    tech_stack: list[str] | None = None
+    category: str | None = None
+    difficulty: str | None = None
+    what_you_get: list[str] | None = None
+    demo_points: list[str] | None = None
+    price_inr: int | None = Field(default=None, ge=0)
+    demo_url: str | None = None
+    readme_text: str | None = None
+
+
+class ProjectRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    seller_id: int
     title: str
-    explanation: str
-    suggestion: str
+    tagline: str
+    description: str
+    tech_stack: list[str]
+    category: str
+    difficulty: str
+    what_you_get: list[str]
+    demo_points: list[str]
+    price_inr: int
+    demo_url: str
+    status: str
+    ai_score: int | None
+    ai_review: dict[str, Any] | None
+    has_file: bool = False
+    created_at: datetime
 
 
-class FileFindings(BaseModel):
-    """Validates one file's model reply (the top-level object we ask for)."""
+class PublishResponse(BaseModel):
+    id: int
+    status: str
 
-    findings: list[Finding] = Field(default_factory=list)
+
+# --- AI: A1 autofill --------------------------------------------------------
 
 
-class SkippedFile(BaseModel):
-    """A file we could not review, plus the human-readable reason why."""
+class AutofillRequest(BaseModel):
+    readme_text: str = Field(min_length=1)
 
-    file: str
-    reason: str
+
+class AutofillResult(BaseModel):
+    title: str = Field(max_length=120)
+    tagline: str = Field(max_length=200)
+    description: str
+    tech_stack: list[str]
+    category: Literal[CATEGORIES]  # type: ignore[valid-type]
+    difficulty: Literal[DIFFICULTIES]  # type: ignore[valid-type]
+    what_you_get: list[str]
+    demo_points: list[str]
+
+
+# --- AI: A2 review ----------------------------------------------------------
 
 
 class ReviewRequest(BaseModel):
-    diff: str = Field(min_length=1)
+    """Review a saved project, or review a listing that is not saved yet."""
+
+    project_id: int | None = None
+    listing: ListingFields | None = None
+    readme_text: str = ""
+
+    @model_validator(mode="after")
+    def _need_a_listing(self) -> "ReviewRequest":
+        if self.project_id is None and self.listing is None:
+            raise ValueError("provide project_id or listing")
+        return self
 
 
-class ReviewResponse(BaseModel):
-    findings: list[Finding]
-    skipped: list[SkippedFile]
-    files_reviewed: int
+class ReviewResult(BaseModel):
+    score: int = Field(ge=0, le=100)
+    summary: str
+    missing_items: list[str]
+    risk_flags: list[str]
+    suggestions: list[str]
 
 
-class HealthResponse(BaseModel):
-    ollama_up: bool
-    model: str
-    model_pulled: bool
+# --- AI: A3 ask the project -------------------------------------------------
 
 
-# Flat JSON schema handed to Ollama's structured-output `format` field.
-# Written by hand instead of using FileFindings.model_json_schema() because the
-# generated version relies on $defs/$ref, which is harder for the grammar
-# converter to handle. Keep this in sync with FileFindings above.
-FINDINGS_JSON_SCHEMA: dict = {
-    "type": "object",
-    "properties": {
-        "findings": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "file": {"type": "string"},
-                    "line": {"type": "integer"},
-                    "severity": {"type": "string", "enum": ["high", "medium", "low"]},
-                    "title": {"type": "string"},
-                    "explanation": {"type": "string"},
-                    "suggestion": {"type": "string"},
-                },
-                "required": [
-                    "file",
-                    "line",
-                    "severity",
-                    "title",
-                    "explanation",
-                    "suggestion",
-                ],
-            },
-        }
-    },
-    "required": ["findings"],
-}
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
+class AskResult(BaseModel):
+    answer: str
+    in_listing: bool
+
+
+# --- Orders -----------------------------------------------------------------
+
+
+class OrderCreate(BaseModel):
+    project_id: int
+
+
+class OrderRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    project_title: str = ""
+    amount_inr: int
+    provider: str
+    provider_ref: str | None
+    status: str
+    created_at: datetime

@@ -1,1 +1,0 @@
-# Hacktoberfest_Hack_Day
