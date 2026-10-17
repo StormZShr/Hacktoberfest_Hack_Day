@@ -1,5 +1,5 @@
 // Every API call in the app goes through this file (see plan.md section 4).
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
 
 function detailOf(data, status) {
   const detail = data && data.detail;
@@ -25,7 +25,7 @@ async function request(path, { method = "GET", body, token, raw = false } = {}) 
     });
   } catch {
     throw new Error(
-      "The API is not running. Start it with: uvicorn main:app --port 8000 (in backend/)."
+      "The API is not running. Start it with: uvicorn main:app --port 8001 (in backend/)."
     );
   }
 

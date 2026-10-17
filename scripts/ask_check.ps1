@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$base = "http://127.0.0.1:8000"
+$base = "http://127.0.0.1:8001"
 $ok = 0; $fail = 0
 function Check($name, $condition, $detail) {
   if ($condition) { $script:ok++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" }
