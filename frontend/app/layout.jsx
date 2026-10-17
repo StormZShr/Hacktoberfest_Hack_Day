@@ -24,7 +24,7 @@ export default function RootLayout({ children }) {
           <header className="masthead">
             <div className="masthead-top">
               <Link className="wordmark" href="/">
-                Launchpad
+                Repopilot AI
               </Link>
               <nav className="nav">
                 <Link className="nav-link" href="/">
