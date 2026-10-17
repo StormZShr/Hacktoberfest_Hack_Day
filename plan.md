@@ -136,6 +136,12 @@ launchpad/
 ├── plan.md
 ├── README.md
 ├── AGENTS.md
+├── scripts/                 # manual verification, run against the live app
+│   ├── day1_check.ps1       # auth, projects, publish gates, A1, A2
+│   ├── day2_check.ps1       # upload, gated download, A3, orders, filters
+│   ├── ask_check.ps1        # A3 grounding flag
+│   ├── contrast.mjs         # WCAG AA pairs from the design tokens
+│   └── ui_flow.mjs          # the whole flow in headless Chrome (CDP)
 ├── backend/
 │   ├── main.py              # app, CORS, router registration, /health
 │   ├── config.py            # env: model, ollama url, jwt secret, limits
