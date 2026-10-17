@@ -1,0 +1,65 @@
+diff --git a/samples/config.py b/samples/config.py
+index 92c5e4f..7006855 100644
+--- a/samples/config.py
++++ b/samples/config.py
+@@ -1,10 +1,19 @@
+ DEFAULT_TIMEOUT = 30
++API_TOKEN = "sk-live-8f2c91d4"
+ 
+ 
+ def load(path):
+-    with open(path) as handle:
+-        return handle.read()
++    handle = open(path)
++    return handle.read()
+ 
+ 
+-def retry(times):
+-    return times
++def retry(times=3):
++    limit = 0
++    while times > 0:
++        limit += 1
++        times -= 1
++    return limit
++
++
++def compute_retry_delay(idx):
++    return DEFAULT_TIMEOUT / idx
+diff --git a/samples/inventory.py b/samples/inventory.py
+index bece0b4..081bd95 100644
+--- a/samples/inventory.py
++++ b/samples/inventory.py
+@@ -1,14 +1,31 @@
++import json
++import os
++
+ inventory = {}
+ 
+ 
+-def add_item(name, items):
++def add_item(name, items=[]):
+     items.append(name)
+     return items
+ 
+ 
+ def total_price(prices):
++    if prices == None:
++        return 0
+     return sum(prices)
+ 
+ 
++def average_price(prices):
++    return sum(prices) / len(prices)
++
++
+ def find(name):
++    del inventory[name]
+     return inventory[name]
++
++
++def parse_payload(raw):
++    try:
++        return json.loads(raw)
++    except:
++        pass
